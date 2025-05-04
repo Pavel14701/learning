@@ -26,6 +26,9 @@ class DataProcessor:
         - y: метки классов (np.ndarray).
         """
 
+        # 🔹 Ограничение window_size, чтобы избежать выхода за границы
+        window_size = min(window_size, len(time) // 2)
+
         kernel_size: int = 15
         smoothed: np.ndarray = uniform_filter1d(data, size=kernel_size)
 
@@ -39,27 +42,28 @@ class DataProcessor:
         left_indices: np.ndarray = np.add.outer(
             indices, 
             np.arange(-window_size, 0)
-        )
+        ).T
         right_indices: np.ndarray = np.add.outer(
             indices, 
             np.arange(0, window_size)
-        )
+        ).T
 
         # 🔹 Исправлено: Приводим к 1D формату перед передачей в polyfit()
         left_trend: np.ndarray = np.polyfit(
-            time[left_indices.T].flatten(), 
-            smoothed[left_indices.T].flatten(), 
+            time[left_indices].reshape(-1), 
+            smoothed[left_indices].reshape(-1), 
             1
         )[0]
         right_trend: np.ndarray = np.polyfit(
-            time[right_indices.T].flatten(), 
-            smoothed[right_indices.T].flatten(), 
+            time[right_indices].reshape(-1), 
+            smoothed[right_indices].reshape(-1), 
             1
         )[0]
 
-        # 🔹 Исправлено: Проверяем размеры всех массивов перед column_stack()
-        assert left_trend.shape == right_trend.shape == indices.shape, "❌ Несовпадение размеров массивов!"
-        
+        # 🔹 Проверяем размеры массивов перед column_stack()
+        print(f"Размеры массивов перед column_stack:")
+        print(f"left_trend.shape: {left_trend.shape}, right_trend.shape: {right_trend.shape}, indices.shape: {indices.shape}")
+
         trend_ratio: np.ndarray = np.divide(
             right_trend, left_trend, 
             out=np.zeros_like(right_trend), 
@@ -68,17 +72,17 @@ class DataProcessor:
         sign_change: np.ndarray = np.sign(left_trend) != np.sign(right_trend)
         curvature: np.ndarray = second_deriv[indices] * np.sign(right_trend - left_trend)
 
-        # 🔹 Исправлено: Убеждаемся, что все массивы имеют одинаковый shape
+        # 🔹 Убеждаемся, что все массивы имеют одинаковый shape
         all_arrays = [
             left_trend, right_trend, trend_ratio, curvature,
-            np.mean(first_deriv[left_indices.T], axis=1),
-            np.mean(first_deriv[right_indices.T], axis=1),
-            np.std(first_deriv[left_indices.T], axis=1),
-            np.std(first_deriv[right_indices.T], axis=1),
+            np.mean(first_deriv[left_indices], axis=1),
+            np.mean(first_deriv[right_indices], axis=1),
+            np.std(first_deriv[left_indices], axis=1),
+            np.std(first_deriv[right_indices], axis=1),
             sign_change, np.abs(left_trend - right_trend),
             second_deriv[indices],
-            np.mean(second_deriv[left_indices.T], axis=1),
-            np.mean(second_deriv[right_indices.T], axis=1)
+            np.mean(second_deriv[left_indices], axis=1),
+            np.mean(second_deriv[right_indices], axis=1)
         ]
 
         # 🔹 Проверяем размер каждого массива перед column_stack()
