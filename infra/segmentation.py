@@ -49,7 +49,7 @@ class SegmentationModel:
         """Обучение модели"""
         X_scaled: np.ndarray = self.scaler.fit_transform(X)
         self.model.fit(
-            X_scaled, y, epochs=5, batch_size=16, 
+            X_scaled, y, epochs=100, batch_size=16, 
             validation_split=0.2, verbose=1,
             callbacks=[
                 keras.callbacks.ReduceLROnPlateau(
