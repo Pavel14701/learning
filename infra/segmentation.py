@@ -49,7 +49,7 @@ class SegmentationModel:
         """Обучение модели"""
         X_scaled: np.ndarray = self.scaler.fit_transform(X)
         self.model.fit(
-            X_scaled, y, epochs=100, batch_size=16, 
+            X_scaled, y, epochs=5, batch_size=16, 
             validation_split=0.2, verbose=1,
             callbacks=[
                 keras.callbacks.ReduceLROnPlateau(
@@ -60,118 +60,85 @@ class SegmentationModel:
         return self.model, self.scaler
 
     def predict_segments(
-        self, 
-        model: keras.Sequential, 
-        scaler: MinMaxScaler, 
-        time: np.ndarray, 
-        data: np.ndarray,
-        window_size: int = 15, 
-        min_segment_length: int = 25, 
-        max_segments: int = 40
+        self, model: keras.Sequential, scaler: MinMaxScaler,
+        time: np.ndarray, data: np.ndarray,
+        window_size: int = 15, min_segment_length: int = 25, max_segments: int = 40
     ) -> List[Tuple[int, int]]:
         """Метод для предсказания сегментов"""
+
         smoothed_data: np.ndarray = savgol_filter(data, 21, 3)
         first_deriv: np.ndarray = np.gradient(smoothed_data)
         second_deriv: np.ndarray = np.gradient(first_deriv)
+
         trend_changes: np.ndarray = np.flatnonzero(np.diff(np.sign(first_deriv)))
-
         indices: np.ndarray = trend_changes[
-            (
-                trend_changes >= window_size
-            ) & (
-                trend_changes < len(time) - window_size
-            )
+            (trend_changes >= window_size) & (trend_changes < len(time) - window_size)
         ]
-        left_indices: np.ndarray = np.add.outer(
-            indices, 
-            np.arange(-window_size, 0)
-        )
-        right_indices: np.ndarray = np.add.outer(
-            indices, 
-            np.arange(0, window_size)
-        )
 
-        left_trend: np.ndarray = np.polyfit(
-            time[left_indices.T], 
-            smoothed_data[left_indices.T], 
-            deg=1
-        )[0]
-        right_trend: np.ndarray = np.polyfit(
-            time[right_indices.T], 
-            smoothed_data[right_indices.T], 
-            deg=1
-        )[0]
+        left_indices: np.ndarray = np.add.outer(indices, np.arange(-window_size, 0)).T
+        right_indices: np.ndarray = np.add.outer(indices, np.arange(0, window_size)).T
+
+        # 🔹 Исправлено: Приводим `left_trend` и `right_trend` к `shape (indices.shape,)`
+        left_trend: np.ndarray = np.full(indices.shape, np.polyfit(
+            time[left_indices].flatten(), smoothed_data[left_indices].flatten(), 1
+        )[0])
+        
+        right_trend: np.ndarray = np.full(indices.shape, np.polyfit(
+            time[right_indices].flatten(), smoothed_data[right_indices].flatten(), 1
+        )[0])
 
         trend_ratio: np.ndarray = np.divide(
-            right_trend, left_trend, 
-            out=np.zeros_like(right_trend), 
-            where=left_trend != 0
+            right_trend, left_trend, out=np.zeros_like(right_trend), where=left_trend != 0
         )
-        sign_change: np.ndarray = np.sign(left_trend) != np.sign(right_trend)
-        curvature: np.ndarray = second_deriv[indices] * np.sign(
-            right_trend - left_trend
-        )
+        sign_change: np.ndarray = np.full(indices.shape, np.sign(left_trend) != np.sign(right_trend))
+        curvature: np.ndarray = second_deriv[indices] * np.sign(right_trend - left_trend)
 
-        features: np.ndarray = np.column_stack([
+        # 🔹 Приведение `mean()` и `std()` к `shape (indices.shape,)`
+        mean_left_first = np.mean(first_deriv[left_indices], axis=0).reshape(indices.shape)
+        mean_right_first = np.mean(first_deriv[right_indices], axis=0).reshape(indices.shape)
+
+        std_left_first = np.std(first_deriv[left_indices], axis=0).reshape(indices.shape)
+        std_right_first = np.std(first_deriv[right_indices], axis=0).reshape(indices.shape)
+
+        mean_left_second = np.mean(second_deriv[left_indices], axis=0).reshape(indices.shape)
+        mean_right_second = np.mean(second_deriv[right_indices], axis=0).reshape(indices.shape)
+
+        # 🔹 Убеждаемся, что все массивы имеют одинаковый shape
+        all_arrays = [
             left_trend, right_trend, trend_ratio, curvature,
-            np.mean(
-                first_deriv[left_indices.T], axis=1
-            ), np.mean(
-                first_deriv[right_indices.T], axis=1
-            ),
-            np.std(
-                first_deriv[left_indices.T], axis=1
-            ), np.std(
-                first_deriv[right_indices.T], axis=1
-            ),
-            sign_change, np.abs(
-                left_trend - right_trend
-            ), second_deriv[indices],
-            np.mean(
-                second_deriv[left_indices.T], axis=1
-            ), np.mean(
-                second_deriv[right_indices.T], axis=1
-            )
-        ])
+            mean_left_first, mean_right_first,
+            std_left_first, std_right_first,
+            sign_change, np.abs(left_trend - right_trend),
+            second_deriv[indices], mean_left_second, mean_right_second
+        ]
+
+        # 🔹 Проверяем размер каждого массива перед column_stack()
+        for i, arr in enumerate(all_arrays):
+            print(f"Массив {i}: shape {arr.shape}")
+
+        features: np.ndarray = np.column_stack(all_arrays)
 
         X_scaled: np.ndarray = scaler.transform(features)
-        probs: np.ndarray = model.predict(
-            X_scaled
-        ).flatten() if isinstance(
-            model.predict(X_scaled), np.ndarray
-        ) else np.array(
-            model.predict(X_scaled)
-        ).flatten()
+        probs: np.ndarray = model.predict(X_scaled).flatten()
 
         extra_points: np.ndarray = indices[probs > 0.5]
         main_points: np.ndarray = np.unique(
-            np.concatenate(
-                [
-                    trend_changes, extra_points, 
-                    np.flatnonzero(
-                        np.abs(second_deriv) > 1.5 * np.std(second_deriv)
-                    )
-                ]
-            )
+            np.concatenate([
+                trend_changes, extra_points,
+                np.flatnonzero(np.abs(second_deriv) > 1.5 * np.std(second_deriv))
+            ])
         )
+
         main_points = main_points[
-            (
-                main_points >= min_segment_length
-            ) & (
-                main_points < len(time) - min_segment_length
-            )
+            (main_points >= min_segment_length) & (main_points < len(time) - min_segment_length)
         ]
 
-        final_points: np.ndarray = np.array(
-            [p for i, p in enumerate(main_points) 
-            if i == 0 or (
-                p - main_points[i - 1] > min_segment_length // 2
-            )]
-        )
+        final_points: np.ndarray = np.array([
+            p for i, p in enumerate(main_points) if i == 0 or (p - main_points[i - 1] > min_segment_length // 2)
+        ])
+
         segments: List[Tuple[int, int]] = [
-            (start, end) for start, end in zip(
-                [0] + final_points.tolist(), 
-                final_points.tolist() + [len(time) - 1]
-            )
+            (start, end) for start, end in zip([0] + final_points.tolist(), final_points.tolist() + [len(time) - 1])
         ]
+
         return segments[:max_segments]
