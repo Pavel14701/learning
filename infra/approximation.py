@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import List, Dict, Any
 
 import keras._tf_keras.keras as keras  # type: ignore
 import numpy as np
@@ -20,15 +20,13 @@ class ApproximationModel:
         """Инициализация модели"""
         self.model: keras.Sequential = self._build_model()
         self.learning_rate: float = learning_rate
-
-        # 🔹 Установка доступных GPU перед началом асинхронного обучения
-        self._set_gpu_device()
+        self._set_gpu_device()  # Настроить GPU
 
     def _set_gpu_device(self) -> None:
         """Гарантированное использование GPU"""
-        gpu_devices = tf.config.list_physical_devices('GPU')
+        gpu_devices = tf.config.list_physical_devices("GPU")
         if gpu_devices:
-            tf.config.set_visible_devices(gpu_devices[0], 'GPU')
+            tf.config.set_visible_devices(gpu_devices[0], "GPU")
             print("🚀 Используется GPU:", gpu_devices[0])
         else:
             print("⚠ GPU не обнаружена, используется CPU")
@@ -36,10 +34,10 @@ class ApproximationModel:
     def _build_model(self) -> keras.Sequential:
         """Создание модели для аппроксимации kx + a + b*sin(cx + d)"""
         model = keras.Sequential([
-            Dense(128, activation='relu', input_shape=(1,)),
+            Dense(128, activation="relu", input_shape=(1,)),
             BatchNormalization(),
             Dropout(0.2),
-            Dense(128, activation='relu'),
+            Dense(128, activation="relu"),
             BatchNormalization(),
             Dropout(0.2),
             Dense(5)
@@ -53,46 +51,33 @@ class ApproximationModel:
         x, y_true_values = tf.split(y_true, num_or_size_splits=2, axis=1)
         y_pred_values = k * x + a + b * tf.sin(c * x + d)
         mse_loss = keras.losses.Huber()(y_true_values, y_pred_values)
-        reg_loss = 0.001 * tf.reduce_mean(
-            tf.square(k) + tf.square(a) + tf.square(b) + tf.square(c) + tf.square(d)
-        )
+        reg_loss = 0.001 * tf.reduce_mean(tf.square(k) + tf.square(a) + tf.square(b) + tf.square(c) + tf.square(d))
         return mse_loss + reg_loss
 
-    async def train_segment_async(
-        self, 
-        seg: Dict[str, np.ndarray]
-    ) -> keras.Sequential:
+    async def train_segment_async(self, seg: Dict[str, np.ndarray]) -> keras.Sequential:
         """Асинхронное обучение одного сегмента"""
-        time_seg: np.ndarray = seg['time'].reshape(-1, 1)
-        vel_seg: np.ndarray = seg['velocity'].reshape(-1, 1)
+        time_seg: np.ndarray = seg["time"].reshape(-1, 1)
+        vel_seg: np.ndarray = seg["velocity"].reshape(-1, 1)
         scaler_X: StandardScaler = StandardScaler()
         scaler_y: StandardScaler = StandardScaler()
         X_scaled: np.ndarray = scaler_X.fit_transform(time_seg)
         y_scaled: np.ndarray = scaler_y.fit_transform(vel_seg)
         X_scaled_tf: tf.Tensor = tf.convert_to_tensor(X_scaled, dtype=tf.float32)
         y_true_for_loss_tf: tf.Tensor = tf.convert_to_tensor(
-            np.column_stack([X_scaled, y_scaled]), 
-            dtype=tf.float32
+            np.column_stack([X_scaled, y_scaled]), dtype=tf.float32
         )
 
         optimizer = Adam(learning_rate=self.learning_rate)
         self.model.compile(optimizer=optimizer, loss=self.custom_loss)
 
-        # 🔹 Удалён `tf.device('/GPU:0')`, теперь GPU выбирается заранее
         await asyncio.to_thread(
-            self.model.fit, 
-            X_scaled_tf, 
-            y_true_for_loss_tf, 
-            epochs=400, 
-            verbose=1
+            self.model.fit, X_scaled_tf, y_true_for_loss_tf, epochs=400, verbose=1
         )
         return self.model
 
-    async def train_parallel_async(
-        self, 
-        segments: List[Dict[str, Any]]
-    ) -> List[keras.Sequential]:
-        """Запускаем обучение всех сегментов параллельно"""
-        tasks = [self.train_segment_async(seg) for seg in segments]
+    async def train_parallel_async(self, segments: List[Dict[str, Any]]) -> List[keras.Sequential]:
+        """Запускаем 100 потоков для асинхронного обучения моделей"""
+        tasks = [self.train_segment_async(seg) for seg in segments[:100]]
         models = await asyncio.gather(*tasks)
         return models
+
