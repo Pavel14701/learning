@@ -1,2 +1,5 @@
 train.py
 .venv
+.opt
+*__pycache__
+*.mypy_cache
