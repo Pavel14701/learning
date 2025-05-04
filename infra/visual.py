@@ -1,5 +1,6 @@
 from operator import itemgetter
 from typing import Any, Dict, List
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,14 +17,14 @@ class Visualization:
         data_x: np.ndarray, 
         data_y: np.ndarray, 
         segments: List[Dict[str, Any]], 
-        approx_models: List[Dict[str, Any]],
+        approx_models: List[Any],  # Теперь `approx_models` может содержать `Sequential`
         output_dir: str = "./plots/"
     ) -> None:
         """Инициализация визуализации"""
         self.data_x: np.ndarray = data_x
         self.data_y: np.ndarray = data_y
         self.segments: List[Dict[str, np.ndarray]] = segments
-        self.approx_models: List[Dict[str, Any]] = approx_models
+        self.approx_models: List[Any] = approx_models  # Может содержать и словари, и `Sequential`
         self.colors: np.ndarray = np.array(
             plt.get_cmap('rainbow')(
                 np.linspace(0, 1, len(approx_models))
@@ -32,6 +33,9 @@ class Visualization:
         self.all_errors: List[float] = []
         self.all_times: List[float] = []
         self.output_dir: str = output_dir  # Папка для сохранения графиков
+        
+        # 🔹 Создаём папку для графиков, если её нет
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def plot_approximation(self) -> None:
         """График аппроксимации сегментов"""
@@ -52,12 +56,21 @@ class Visualization:
             data_x_seg: np.ndarray = seg['time']
             data_y_seg: np.ndarray = seg['velocity']
 
-            model: Sequential = model_info.get("model")
-            scaler_X: MinMaxScaler = model_info.get("scaler_X")
-            scaler_y: MinMaxScaler = model_info.get("scaler_y")
-            params = model_info.get("params", {})
+            # 🔹 Определяем тип `model_info`
+            if isinstance(model_info, Sequential):
+                model = model_info  # Если `model_info` уже `Sequential`
+                scaler_X = None
+                scaler_y = None
+                params = {}  # Параметры недоступны, если `model_info` — объект `Sequential`
+            elif isinstance(model_info, dict) and "model" in model_info:
+                model: Sequential = model_info["model"]
+                scaler_X: MinMaxScaler = model_info["scaler_X"]
+                scaler_y: MinMaxScaler = model_info["scaler_y"]
+                params = model_info["params"]
+            else:
+                raise TypeError(f"❌ Неожиданный тип model_info: {type(model_info)}")
 
-            if params and model and scaler_X and scaler_y:
+            if params:
                 k, a, b, c, d = itemgetter("k", "a", "b", "c", "d")(params)
                 x_fit: np.ndarray = np.linspace(
                     start=data_x_seg.min(), stop=data_x_seg.max(), num=100
@@ -102,7 +115,7 @@ class Visualization:
         plt.tight_layout()
 
         # 🔹 Сохранение графика вместо вывода на экран
-        plt.savefig(f"{self.output_dir}approximation_plot.png", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{self.output_dir}/approximation_plot.png", dpi=300, bbox_inches="tight")
         plt.close()
 
     def plot_errors(self) -> None:
@@ -131,7 +144,7 @@ class Visualization:
         plt.tight_layout()
 
         # 🔹 Сохранение графика вместо вывода на экран
-        plt.savefig(f"{self.output_dir}error_plot.png", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{self.output_dir}/error_plot.png", dpi=300, bbox_inches="tight")
         plt.close()
 
     def visualize_results(self) -> None:
