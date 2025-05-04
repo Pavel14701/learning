@@ -16,7 +16,8 @@ class Visualization:
         data_x: np.ndarray, 
         data_y: np.ndarray, 
         segments: List[Dict[str, Any]], 
-        approx_models: List[Dict[str, Any]]
+        approx_models: List[Dict[str, Any]],
+        output_dir: str = "./plots/"
     ) -> None:
         """Инициализация визуализации"""
         self.data_x: np.ndarray = data_x
@@ -30,6 +31,7 @@ class Visualization:
         )
         self.all_errors: List[float] = []
         self.all_times: List[float] = []
+        self.output_dir: str = output_dir  # Папка для сохранения графиков
 
     def plot_approximation(self) -> None:
         """График аппроксимации сегментов"""
@@ -50,21 +52,12 @@ class Visualization:
             data_x_seg: np.ndarray = seg['time']
             data_y_seg: np.ndarray = seg['velocity']
 
-            # 🔹 Добавлена проверка, чтобы избежать 'Sequential' object is not subscriptable
-            if isinstance(model_info, Sequential):
-                model = model_info  # Если `model_info` уже `Sequential`, просто используем его
-                scaler_X = None  # Убедись, что `scaler_X` корректно инициализирован
-                scaler_y = None
-                params = {}  # Параметры недоступны, если `model_info` - объект `Sequential`
-            elif isinstance(model_info, dict) and "model" in model_info:
-                model: Sequential = model_info["model"]
-                scaler_X: MinMaxScaler = model_info["scaler_X"]
-                scaler_y: MinMaxScaler = model_info["scaler_y"]
-                params = model_info["params"]
-            else:
-                raise TypeError(f"❌ Неожиданный тип model_info: {type(model_info)}")
+            model: Sequential = model_info.get("model")
+            scaler_X: MinMaxScaler = model_info.get("scaler_X")
+            scaler_y: MinMaxScaler = model_info.get("scaler_y")
+            params = model_info.get("params", {})
 
-            if params:
+            if params and model and scaler_X and scaler_y:
                 k, a, b, c, d = itemgetter("k", "a", "b", "c", "d")(params)
                 x_fit: np.ndarray = np.linspace(
                     start=data_x_seg.min(), stop=data_x_seg.max(), num=100
@@ -108,9 +101,13 @@ class Visualization:
         plt.grid(True)
         plt.tight_layout()
 
+        # 🔹 Сохранение графика вместо вывода на экран
+        plt.savefig(f"{self.output_dir}approximation_plot.png", dpi=300, bbox_inches="tight")
+        plt.close()
+
     def plot_errors(self) -> None:
         """График абсолютной погрешности"""
-        plt.subplot(2, 1, 2)
+        plt.figure(figsize=(18, 8))
         plt.plot(
             self.all_times, 
             self.all_errors, 
@@ -131,11 +128,13 @@ class Visualization:
         plt.ylabel("Погрешность, мм", labelpad=10)
         plt.grid(True, linestyle="--", alpha=0.3)
         plt.legend()
-
         plt.tight_layout()
-        plt.show()
+
+        # 🔹 Сохранение графика вместо вывода на экран
+        plt.savefig(f"{self.output_dir}error_plot.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
     def visualize_results(self) -> None:
-        """Выполняет все визуализации"""
+        """Выполняет все визуализации и сохраняет графики"""
         self.plot_approximation()
         self.plot_errors()
