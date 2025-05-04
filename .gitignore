@@ -3,3 +3,5 @@ train.py
 .opt
 *__pycache__
 *.mypy_cache
+*.ruff_cache
+legacy.py

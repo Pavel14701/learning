@@ -54,3 +54,12 @@ def start(dataframe_x: pd.Series, dataframe_y: pd.Series) -> None:
     # 🔹 **Вывод времени выполнения**
     end_time = time.time()
     print(f"✅ Время выполнения: {end_time - start_time:.2f} секунд")
+
+
+if __name__ == "__main__":
+    df = pd.read_excel(
+        "dataset.xlsx",
+        skiprows=2)
+    data_x = df["Время, с"]
+    data_y = df["Скорость v, м/с"]
+    start(data_x, data_y)
