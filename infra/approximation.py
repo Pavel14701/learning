@@ -21,6 +21,18 @@ class ApproximationModel:
         self.model: keras.Sequential = self._build_model()
         self.learning_rate: float = learning_rate
 
+        # 🔹 Установка доступных GPU перед началом асинхронного обучения
+        self._set_gpu_device()
+
+    def _set_gpu_device(self) -> None:
+        """Гарантированное использование GPU"""
+        gpu_devices = tf.config.list_physical_devices('GPU')
+        if gpu_devices:
+            tf.config.set_visible_devices(gpu_devices[0], 'GPU')
+            print("🚀 Используется GPU:", gpu_devices[0])
+        else:
+            print("⚠ GPU не обнаружена, используется CPU")
+
     def _build_model(self) -> keras.Sequential:
         """Создание модели для аппроксимации kx + a + b*sin(cx + d)"""
         model = keras.Sequential([
@@ -63,16 +75,17 @@ class ApproximationModel:
             dtype=tf.float32
         )
 
-        with tf.device('/GPU:0'):
-            optimizer = Adam(learning_rate=self.learning_rate)
-            self.model.compile(optimizer=optimizer, loss=self.custom_loss)
-            await asyncio.to_thread(
-                self.model.fit, 
-                X_scaled_tf, 
-                y_true_for_loss_tf, 
-                epochs=300, 
-                verbose=1
-            )
+        optimizer = Adam(learning_rate=self.learning_rate)
+        self.model.compile(optimizer=optimizer, loss=self.custom_loss)
+
+        # 🔹 Удалён `tf.device('/GPU:0')`, теперь GPU выбирается заранее
+        await asyncio.to_thread(
+            self.model.fit, 
+            X_scaled_tf, 
+            y_true_for_loss_tf, 
+            epochs=300, 
+            verbose=1
+        )
         return self.model
 
     async def train_parallel_async(
