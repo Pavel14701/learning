@@ -83,7 +83,7 @@ class ApproximationModel:
             self.model.fit, 
             X_scaled_tf, 
             y_true_for_loss_tf, 
-            epochs=300, 
+            epochs=5, 
             verbose=1
         )
         return self.model
