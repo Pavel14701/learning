@@ -48,13 +48,16 @@ class DataProcessor:
         )
 
         left_trend: np.ndarray = np.polyfit(
-            time[left_indices.T], 
-            smoothed[left_indices.T], 1
+            time[left_indices.T].flatten(), 
+            smoothed[left_indices.T].flatten(), 
+            1
         )[0]
         right_trend: np.ndarray = np.polyfit(
-            time[right_indices.T], 
-            smoothed[right_indices.T], 1
+            time[right_indices.T].flatten(), 
+            smoothed[right_indices.T].flatten(), 
+            1
         )[0]
+
 
         trend_ratio: np.ndarray = np.divide(
             right_trend, left_trend, 
