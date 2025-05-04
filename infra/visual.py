@@ -10,6 +10,7 @@ from sklearn.preprocessing import MinMaxScaler  # type: ignore
 
 class Visualization:
     """Класс для визуализации результатов аппроксимации"""
+    
     def __init__(
         self, 
         data_x: np.ndarray, 
@@ -49,58 +50,61 @@ class Visualization:
             data_x_seg: np.ndarray = seg['time']
             data_y_seg: np.ndarray = seg['velocity']
 
-            model: Sequential = model_info['model']
-            scaler_X: MinMaxScaler = model_info['scaler_X']
-            scaler_y: MinMaxScaler = model_info['scaler_y']
-            params = model_info['params']
+            # 🔹 Добавлена проверка, чтобы избежать 'Sequential' object is not subscriptable
+            if isinstance(model_info, Sequential):
+                model = model_info  # Если `model_info` уже `Sequential`, просто используем его
+                scaler_X = None  # Убедись, что `scaler_X` корректно инициализирован
+                scaler_y = None
+                params = {}  # Параметры недоступны, если `model_info` - объект `Sequential`
+            elif isinstance(model_info, dict) and "model" in model_info:
+                model: Sequential = model_info["model"]
+                scaler_X: MinMaxScaler = model_info["scaler_X"]
+                scaler_y: MinMaxScaler = model_info["scaler_y"]
+                params = model_info["params"]
+            else:
+                raise TypeError(f"❌ Неожиданный тип model_info: {type(model_info)}")
 
-            # Генерация точек для гладкой кривой
-            x_fit: np.ndarray = np.linspace(
-                start=data_x_seg.min(), 
-                stop=data_x_seg.max(), 
-                num=100
-            )
+            if params:
+                k, a, b, c, d = itemgetter("k", "a", "b", "c", "d")(params)
+                x_fit: np.ndarray = np.linspace(
+                    start=data_x_seg.min(), stop=data_x_seg.max(), num=100
+                )
 
-            # Получаем параметры модели
-            k, a, b, c, d = itemgetter('k', 'a', 'b', 'c', 'd')(params)
+                y_fit: np.ndarray = k * x_fit + a + b * np.sin(c * x_fit + d)
 
-            y_fit: np.ndarray = k * x_fit + a + b * np.sin(c * x_fit + d)
+                x_seg_scaled: np.ndarray = scaler_X.transform(data_x_seg.reshape(-1, 1))
+                predicted_params: np.ndarray = model.predict(x_seg_scaled)
+                k_pred, a_pred, b_pred, c_pred, d_pred = predicted_params.T
 
-            # Преобразуем входные данные и делаем предсказание
-            x_seg_scaled: np.ndarray = scaler_X.transform(data_x_seg.reshape(-1, 1))
-            predicted_params: np.ndarray = model.predict(x_seg_scaled)
-            k_pred, a_pred, b_pred, c_pred, d_pred = predicted_params.T
+                y_pred_scaled: np.ndarray = (
+                    k_pred * x_seg_scaled[:, 0] + a_pred
+                    + b_pred * np.sin(c_pred * x_seg_scaled[:, 0] + d_pred)
+                )
 
-            y_pred_scaled: np.ndarray = k_pred * x_seg_scaled[:, 0] + \
-                a_pred + b_pred * np.sin(
-                    c_pred * x_seg_scaled[:, 0] + d_pred
-            )
-            y_pred: np.ndarray = scaler_y.inverse_transform(
-                y_pred_scaled.reshape(-1, 1)
-            )
+                y_pred: np.ndarray = scaler_y.inverse_transform(
+                    y_pred_scaled.reshape(-1, 1)
+                )
 
-            # Вычисляем ошибки
-            errors: np.ndarray = np.abs(y_pred.flatten() - data_y_seg.flatten())
-            r2: float = r2_score(data_y_seg, y_pred)
+                errors: np.ndarray = np.abs(y_pred.flatten() - data_y_seg.flatten())
+                r2: float = r2_score(data_y_seg, y_pred)
 
-            # Сохраняем ошибки для графика
-            self.all_errors.extend(errors.tolist())
-            self.all_times.extend(data_x_seg.tolist())
+                self.all_errors.extend(errors.tolist())
+                self.all_times.extend(data_x_seg.tolist())
 
-            # Отрисовка аппроксимационной кривой
-            plt.plot(
-                x_fit, y_fit, linestyle='-', linewidth=2, color=self.colors[i],
-                label=f'Сегмент {i + 1}: y = \
-                    {k:2f}x + {a:2f} + {b:2f}\
-                    sin({c:2f}x + {d:2f}')
+                plt.plot(
+                    x_fit, y_fit, linestyle="-", linewidth=2, color=self.colors[i],
+                    label=f"Сегмент {i + 1}: y = {k:.2f}x + {a:.2f} + {b:.2f}sin({c:.2f}x + {d:.2f})"
+                )
 
-            plt.text(data_x_seg.mean(), y_fit.min(), f'R²={r2:.3f}',
-                     ha='center', va='top', bbox=dict(facecolor='white', alpha=0.8))
+                plt.text(
+                    data_x_seg.mean(), y_fit.min(), f"R²={r2:.3f}",
+                    ha="center", va="top", bbox=dict(facecolor="white", alpha=0.8)
+                )
 
-        plt.xlabel('Время (с)')
-        plt.ylabel('Перемещение (мм)')
-        plt.title('Аппроксимация сегментов моделями')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.xlabel("Время (с)")
+        plt.ylabel("Перемещение (мм)")
+        plt.title("Аппроксимация сегментов моделями")
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
         plt.grid(True)
         plt.tight_layout()
 
@@ -110,22 +114,22 @@ class Visualization:
         plt.plot(
             self.all_times, 
             self.all_errors, 
-            'b-', 
+            "b-", 
             alpha=0.5, 
-            label='Абсолютная погрешность'
+            label="Абсолютная погрешность"
         )
         plt.fill_between(
             x=self.all_times, 
             y1=0, 
             y2=self.all_errors, 
-            color='blue', 
+            color="blue", 
             alpha=0.1
         )
 
         plt.title("Абсолютная погрешность аппроксимации", pad=20)
         plt.xlabel("Время, с", labelpad=10)
         plt.ylabel("Погрешность, мм", labelpad=10)
-        plt.grid(True, linestyle='--', alpha=0.3)
+        plt.grid(True, linestyle="--", alpha=0.3)
         plt.legend()
 
         plt.tight_layout()
