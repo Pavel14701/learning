@@ -3,7 +3,6 @@ from typing import List, Tuple
 
 import keras._tf_keras.keras as keras  # type: ignore
 import numpy as np
-import tensorflow as tf
 from keras._tf_keras.keras.layers import (  # type: ignore
     BatchNormalization,
     Dense,
