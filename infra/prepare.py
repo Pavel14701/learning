@@ -52,14 +52,14 @@ class DataProcessor:
         curvature: np.ndarray = second_deriv[indices] * np.sign(right_trend - left_trend)
 
         # 🔹 Приведение `mean()` и `std()` к `shape (indices.shape,)`
-        mean_left_first = np.mean(first_deriv[left_indices], axis=1).reshape(indices.shape)
-        mean_right_first = np.mean(first_deriv[right_indices], axis=1).reshape(indices.shape)
+        mean_left_first = np.mean(first_deriv[left_indices], axis=0).reshape(indices.shape)
+        mean_right_first = np.mean(first_deriv[right_indices], axis=0).reshape(indices.shape)
 
-        std_left_first = np.std(first_deriv[left_indices], axis=1).reshape(indices.shape)
-        std_right_first = np.std(first_deriv[right_indices], axis=1).reshape(indices.shape)
+        std_left_first = np.std(first_deriv[left_indices], axis=0).reshape(indices.shape)
+        std_right_first = np.std(first_deriv[right_indices], axis=0).reshape(indices.shape)
 
-        mean_left_second = np.mean(second_deriv[left_indices], axis=1).reshape(indices.shape)
-        mean_right_second = np.mean(second_deriv[right_indices], axis=1).reshape(indices.shape)
+        mean_left_second = np.mean(second_deriv[left_indices], axis=0).reshape(indices.shape)
+        mean_right_second = np.mean(second_deriv[right_indices], axis=0).reshape(indices.shape)
 
         # 🔹 Убеждаемся, что все массивы имеют одинаковый shape
         all_arrays = [
