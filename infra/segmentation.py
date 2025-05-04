@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Tuple
+from typing import List, Any, Tuple
 
 import keras._tf_keras.keras as keras  # type: ignore
 import numpy as np
@@ -99,7 +99,10 @@ class SegmentationModel:
             second_deriv[indices], mean_left_second, mean_right_second
         ])
 
+        # 🔹 **Теперь `MinMaxScaler` обучается перед `transform()`**
+        self.scaler.fit(features)  
         X_scaled: np.ndarray = self.scaler.transform(features)
+
         probs: np.ndarray = self.model.predict(X_scaled).flatten()
 
         extra_points: np.ndarray = indices[probs > 0.5]
